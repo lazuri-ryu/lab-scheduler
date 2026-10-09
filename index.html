@@ -1,0 +1,713 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>研究室スケジューラー</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f0f4f8; --surface: #ffffff; --surface2: #e8edf3;
+    --border: #d0d8e4; --text: #1a2433; --text-muted: #6b7a90;
+    --accent: #3b6fd4; --accent-light: #dce8ff;
+    --accent2: #2da87a; --accent2-light: #d0f0e4;
+    --free: #2da87a; --busy: #e85c5c;
+    --common: #f59e0b; --common-light: #fef3c7;
+    --shadow: 0 2px 8px rgba(30,50,80,0.08);
+    box-sizing: border-box;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg:#0f1923;--surface:#1a2738;--surface2:#243348;--border:#2d4060;
+      --text:#e8f0f8;--text-muted:#7a96b8;--accent-light:#1e3560;
+      --accent2-light:#0e3025;--common-light:#3a2800;--shadow:0 2px 8px rgba(0,0,0,0.3);
+    }
+  }
+  *,*::before,*::after{box-sizing:inherit;margin:0;padding:0;}
+  html,body{height:100%;font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text);}
+  body{display:flex;flex-direction:column;min-height:100%;}
+
+  header{background:var(--surface);border-bottom:1px solid var(--border);padding:12px 20px;display:flex;align-items:center;gap:12px;position:sticky;top:env(safe-area-inset-top,0px);z-index:100;box-shadow:var(--shadow);}
+  .logo{font-size:20px;}
+  header h1{font-size:15px;font-weight:700;letter-spacing:.02em;}
+  header p{font-size:11px;color:var(--text-muted);margin-top:1px;}
+  .header-right{margin-left:auto;display:flex;align-items:center;gap:10px;}
+  .user-badge{background:var(--accent-light);color:var(--accent);font-size:12px;font-weight:500;padding:4px 10px;border-radius:20px;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+
+  #login-screen{flex:1;display:flex;align-items:center;justify-content:center;padding:24px;}
+  .login-card{background:var(--surface);border-radius:16px;padding:36px 32px;width:100%;max-width:400px;box-shadow:var(--shadow);text-align:center;}
+  .login-card .icon{font-size:48px;margin-bottom:16px;}
+  .login-card h2{font-size:20px;font-weight:700;margin-bottom:6px;}
+  .login-card .sub{font-size:13px;color:var(--text-muted);margin-bottom:24px;}
+  .input-group{margin-bottom:14px;text-align:left;}
+  .input-group label{font-size:12px;font-weight:500;color:var(--text-muted);display:block;margin-bottom:6px;}
+  .input-group input,.input-group select{width:100%;padding:10px 14px;border:1px solid var(--border);border-radius:8px;font-size:14px;font-family:inherit;background:var(--bg);color:var(--text);outline:none;transition:border-color .15s;}
+  .input-group input:focus,.input-group select:focus{border-color:var(--accent);}
+  .input-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:10px 20px;border-radius:8px;border:none;font-size:13px;font-weight:600;font-family:inherit;cursor:pointer;transition:opacity .15s,transform .1s;}
+  .btn:active{transform:scale(.97);}
+  .btn-primary{background:var(--accent);color:#fff;width:100%;padding:12px;font-size:14px;}
+  .btn-primary:hover{opacity:.9;}
+  .btn-sm{padding:6px 14px;font-size:12px;}
+  .btn-outline{background:transparent;border:1px solid var(--border);color:var(--text);}
+  .btn-outline:hover{background:var(--surface2);}
+  .btn-danger{background:#fee2e2;color:var(--busy);border:none;}
+  .btn-danger:hover{background:#fecaca;}
+
+  #app{display:none;flex:1;flex-direction:column;}
+  #app.visible{display:flex;}
+
+  .ctrl-bar{background:var(--surface);border-bottom:1px solid var(--border);padding:8px 16px;display:flex;align-items:center;gap:6px;overflow-x:auto;-webkit-overflow-scrolling:touch;flex-wrap:nowrap;}
+  .ctrl-sep{width:1px;height:22px;background:var(--border);flex-shrink:0;margin:0 4px;}
+  .ctrl-label{font-size:11px;font-weight:700;color:var(--text-muted);white-space:nowrap;flex-shrink:0;}
+  .seg-btn{padding:5px 13px;border-radius:16px;border:1.5px solid var(--border);background:var(--surface);color:var(--text-muted);font-size:12px;font-weight:600;font-family:inherit;cursor:pointer;white-space:nowrap;flex-shrink:0;transition:all .15s;}
+  .seg-btn.active{background:var(--accent);color:#fff;border-color:var(--accent);}
+  .seg-btn:hover:not(.active){background:var(--surface2);color:var(--text);}
+  .seg-btn.grade-B4.active{background:#6366f1;border-color:#6366f1;}
+  .seg-btn.grade-M1.active{background:#0891b2;border-color:#0891b2;}
+  .seg-btn.grade-M2.active{background:#059669;border-color:#059669;}
+  .field-chip{padding:5px 11px;border-radius:16px;border:1.5px solid var(--border);background:var(--surface);color:var(--text-muted);font-size:12px;font-weight:600;font-family:inherit;cursor:pointer;white-space:nowrap;flex-shrink:0;transition:all .15s;}
+  .field-chip.active{border-color:var(--accent);background:var(--accent-light);color:var(--accent);}
+  .field-chip:hover:not(.active){background:var(--surface2);color:var(--text);}
+
+  .tabs{background:var(--surface);border-bottom:1px solid var(--border);display:flex;padding:0 16px;gap:4px;}
+  .tab{padding:11px 16px;font-size:13px;font-weight:500;color:var(--text-muted);cursor:pointer;border-bottom:2px solid transparent;transition:all .15s;white-space:nowrap;}
+  .tab.active{color:var(--accent);border-bottom-color:var(--accent);}
+  .tab:hover:not(.active){color:var(--text);}
+
+  .panel{display:none;flex:1;overflow-y:auto;padding:20px;}
+  .panel.active{display:block;}
+
+  .q-info-card{background:var(--surface);border-radius:10px;padding:10px 16px;margin-bottom:14px;box-shadow:var(--shadow);display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+  .q-name{font-size:15px;font-weight:700;color:var(--accent);}
+  .filter-tags{display:flex;gap:6px;flex-wrap:wrap;}
+  .ftag{padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;}
+  .ftag-grade{background:#ede9fe;color:#6366f1;}
+  .ftag-field{background:var(--accent-light);color:var(--accent);}
+  .ftag-all{background:var(--surface2);color:var(--text-muted);}
+
+  .schedule-grid-wrap{overflow-x:auto;background:var(--surface);border-radius:12px;box-shadow:var(--shadow);-webkit-overflow-scrolling:touch;}
+  .schedule-grid{display:grid;min-width:480px;}
+  .grid-cell{border-right:1px solid var(--border);border-bottom:1px solid var(--border);min-height:40px;padding:2px;}
+  .grid-cell:last-child{border-right:none;}
+  .day-header{background:var(--surface2);padding:10px 6px;text-align:center;font-size:13px;font-weight:700;border-right:1px solid var(--border);border-bottom:1px solid var(--border);}
+  .day-header:last-child{border-right:none;}
+  .time-label{background:var(--surface2);padding:4px 8px;display:flex;align-items:center;font-size:10px;color:var(--text-muted);font-weight:500;border-right:1px solid var(--border);border-bottom:1px solid var(--border);min-width:120px;line-height:1.4;}
+  .slot-btn{width:100%;height:100%;min-height:42px;border:none;border-radius:4px;cursor:pointer;font-size:11px;font-family:inherit;font-weight:600;transition:background .12s,transform .1s;background:transparent;color:var(--text-muted);display:flex;align-items:center;justify-content:center;padding:2px;}
+  .slot-btn:hover{background:var(--surface2);transform:scale(.97);}
+  .slot-btn.busy{background:#fee2e2;color:var(--busy);}
+  .slot-btn.busy:hover{background:#fecaca;}
+
+  .section-title{font-size:12px;font-weight:700;color:var(--text-muted);letter-spacing:.05em;text-transform:uppercase;margin:20px 0 10px;}
+  .section-title:first-child{margin-top:0;}
+  .member-list{background:var(--surface);border-radius:12px;box-shadow:var(--shadow);overflow:hidden;}
+  .member-item{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--border);}
+  .member-item:last-child{border-bottom:none;}
+  .member-avatar{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;flex-shrink:0;}
+  .member-name{font-size:14px;font-weight:500;}
+  .member-sub{font-size:11px;color:var(--text-muted);margin-top:2px;display:flex;gap:6px;flex-wrap:wrap;}
+  .grade-pill{padding:1px 7px;border-radius:8px;font-size:10px;font-weight:700;}
+  .grade-B4{background:#ede9fe;color:#6366f1;}
+  .grade-M1{background:#cffafe;color:#0891b2;}
+  .grade-M2{background:#d1fae5;color:#059669;}
+  .field-pill{padding:1px 7px;border-radius:8px;font-size:10px;font-weight:600;background:var(--accent-light);color:var(--accent);}
+  .common-result-card{background:var(--surface);border-radius:12px;box-shadow:var(--shadow);padding:14px 16px;margin-bottom:10px;border-left:4px solid var(--common);}
+  .common-result-card h3{font-size:14px;font-weight:700;margin-bottom:4px;}
+  .badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;}
+  .badge-green{background:var(--accent2-light);color:var(--free);}
+  .empty-state{text-align:center;padding:40px 20px;color:var(--text-muted);font-size:13px;}
+  .empty-state .icon{font-size:36px;margin-bottom:10px;}
+  .loading{text-align:center;padding:30px;color:var(--text-muted);font-size:13px;}
+
+  .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:200;display:flex;align-items:center;justify-content:center;padding:24px;}
+  .modal{background:var(--surface);border-radius:16px;padding:28px 24px;width:100%;max-width:360px;box-shadow:0 8px 32px rgba(0,0,0,.18);}
+  .modal h3{font-size:16px;font-weight:700;margin-bottom:8px;}
+  .modal p{font-size:13px;color:var(--text-muted);margin-bottom:18px;line-height:1.6;}
+  .modal-btns{display:flex;gap:10px;}
+  .modal-btns .btn{flex:1;}
+
+  #toast{position:fixed;bottom:calc(24px + env(safe-area-inset-bottom,0px));left:50%;transform:translateX(-50%) translateY(20px);background:#1a2433;color:#fff;padding:10px 20px;border-radius:20px;font-size:13px;font-weight:500;opacity:0;transition:all .25s;pointer-events:none;z-index:999;white-space:nowrap;}
+  #toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+  @media(max-width:480px){.tab{padding:10px 12px;font-size:12px;}.panel{padding:14px;}}
+</style>
+</head>
+<body>
+
+<div id="login-screen">
+  <div class="login-card">
+    <div class="icon">🔬</div>
+    <h2>研究室スケジューラー</h2>
+    <p class="sub">プロフィールを入力してログインしてください</p>
+    <div class="input-group">
+      <label>表示名</label>
+      <input type="text" id="name-input" placeholder="例：田中 太郎" maxlength="20">
+    </div>
+    <div class="input-row">
+      <div class="input-group">
+        <label>学年</label>
+        <select id="grade-input">
+          <option value="B4">B4</option>
+          <option value="M1">M1</option>
+          <option value="M2">M2</option>
+        </select>
+      </div>
+      <div class="input-group">
+        <label>研究分野 <span style="font-weight:400;color:var(--text-muted);">（任意）</span></label>
+        <input type="text" id="field-input" placeholder="例：機械学習（省略可）" maxlength="20">
+      </div>
+    </div>
+    <button class="btn btn-primary" onclick="login()">ログイン</button>
+    <p style="margin-top:14px;font-size:11px;color:var(--text-muted);line-height:1.7;text-align:left;background:var(--bg);border-radius:8px;padding:10px 12px;">
+      💡 <strong>研究分野について</strong><br>
+      入力しなくてもログインできます。<br>
+      入力する場合は、他のメンバーと<strong>同じ表記</strong>にするとフィルターで一緒にグループ化されます。<br>
+      例：「機械学習」「信号処理」「画像認識」など、研究室内で共有した名前を使ってください。
+    </p>
+  </div>
+</div>
+
+<header>
+  <div class="logo">🔬</div>
+  <div>
+    <h1>研究室スケジューラー</h1>
+    <p>波動信号処理研究室</p>
+  </div>
+  <div class="header-right">
+    <span class="user-badge" id="header-user"></span>
+    <button class="btn btn-sm btn-outline" onclick="logout()">ログアウト</button>
+    <button class="btn btn-sm btn-danger" onclick="showLeaveModal()">退室</button>
+  </div>
+</header>
+
+<div id="app">
+  <div class="ctrl-bar">
+    <span class="ctrl-label">Q：</span>
+    <button class="seg-btn active" onclick="selectQ(1)" id="q-btn-1">第1Q</button>
+    <button class="seg-btn" onclick="selectQ(2)" id="q-btn-2">第2Q</button>
+    <button class="seg-btn" onclick="selectQ(3)" id="q-btn-3">第3Q</button>
+    <button class="seg-btn" onclick="selectQ(4)" id="q-btn-4">第4Q</button>
+    <div class="ctrl-sep"></div>
+    <span class="ctrl-label">学年：</span>
+    <button class="seg-btn active" onclick="toggleGrade('ALL')" id="g-btn-ALL">全員</button>
+    <button class="seg-btn grade-B4" onclick="toggleGrade('B4')" id="g-btn-B4">B4</button>
+    <button class="seg-btn grade-M1" onclick="toggleGrade('M1')" id="g-btn-M1">M1</button>
+    <button class="seg-btn grade-M2" onclick="toggleGrade('M2')" id="g-btn-M2">M2</button>
+    <div class="ctrl-sep"></div>
+    <span class="ctrl-label">分野：</span>
+    <div id="field-chips"></div>
+  </div>
+
+  <div class="tabs">
+    <div class="tab active" onclick="switchTab('my')">自分の予定</div>
+    <div class="tab" onclick="switchTab('overview')">全員の予定</div>
+    <div class="tab" onclick="switchTab('common')">共通の空き</div>
+    <div class="tab" onclick="switchTab('members')">メンバー</div>
+  </div>
+
+  <div class="panel active" id="panel-my">
+    <div class="q-info-card">
+      <span class="q-name" id="my-q-name"></span>
+      <div class="filter-tags" id="my-filter-tags"></div>
+    </div>
+    <div class="schedule-grid-wrap">
+      <div class="schedule-grid" id="my-grid"></div>
+    </div>
+    <p style="font-size:11px;color:var(--text-muted);margin-top:10px;text-align:center;">授業がある時間帯をタップして登録・解除できます（× = 授業あり）</p>
+  </div>
+
+  <div class="panel" id="panel-overview">
+    <div class="q-info-card">
+      <span class="q-name" id="ov-q-name"></span>
+      <div class="filter-tags" id="ov-filter-tags"></div>
+    </div>
+    <div class="loading" id="overview-loading">読み込み中...</div>
+    <div id="overview-content" style="display:none">
+      <div class="schedule-grid-wrap">
+        <div id="overview-grid"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel" id="panel-common">
+    <div class="q-info-card">
+      <span class="q-name" id="cm-q-name"></span>
+      <div class="filter-tags" id="cm-filter-tags"></div>
+    </div>
+    <div class="loading" id="common-loading">読み込み中...</div>
+    <div id="common-content" style="display:none"></div>
+  </div>
+
+  <div class="panel" id="panel-members">
+    <div class="loading" id="members-loading">読み込み中...</div>
+    <div id="members-content" style="display:none"></div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<div class="modal-overlay" id="leave-modal" style="display:none;">
+  <div class="modal">
+    <h3>🚪 退室しますか？</h3>
+    <p>あなたのデータ（授業登録・プロフィール）がすべて削除されます。この操作は取り消せません。</p>
+    <div class="modal-btns">
+      <button class="btn btn-outline" onclick="closeModal('leave-modal')">キャンセル</button>
+      <button class="btn btn-danger" onclick="leaveAccount()">退室する</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="admin-modal" style="display:none;">
+  <div class="modal">
+    <h3>🗑 メンバーを削除</h3>
+    <p id="admin-modal-desc"></p>
+    <div class="input-group">
+      <label>管理者パスワード</label>
+      <input type="password" id="admin-pw-input" placeholder="パスワードを入力">
+    </div>
+    <div class="modal-btns">
+      <button class="btn btn-outline" onclick="closeModal('admin-modal')">キャンセル</button>
+      <button class="btn btn-danger" onclick="adminDelete()">削除する</button>
+    </div>
+  </div>
+</div>
+
+<!-- Firebase SDK -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/firebase/10.12.2/firebase-app-compat.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/firebase/10.12.2/firebase-database-compat.min.js"></script>
+
+<script>
+// ---- Firebase 設定 ----
+const firebaseConfig = {
+  apiKey: "AIzaSyAoc-IoYmPcppcuxCevY8NKF4s10AymF7A",
+  authDomain: "lab-scheduler-744fa.firebaseapp.com",
+  databaseURL: "https://lab-scheduler-744fa-default-rtdb.firebaseio.com",
+  projectId: "lab-scheduler-744fa",
+  storageBucket: "lab-scheduler-744fa.firebasestorage.app",
+  messagingSenderId: "729992274733",
+  appId: "1:729992274733:web:02f16de9f39caedb5f69a4"
+};
+firebase.initializeApp(firebaseConfig);
+const rtdb = firebase.database();
+
+// ---- 定数 ----
+const ADMIN_PASSWORD = 'wsp-lab-admin';
+const DAYS = ['月','火','水','木','金'];
+const PERIODS = [
+  { label: '第1講時', time: '8:40〜10:25' },
+  { label: '第2講時', time: '10:35〜12:20' },
+  { label: '第3講時', time: '13:10〜14:55' },
+  { label: '第4講時', time: '15:05〜16:50' },
+  { label: '第5講時', time: '17:00〜18:45' },
+  { label: '第6講時', time: '18:55〜20:40' },
+];
+const QUARTERS = { 1:'第1Q', 2:'第2Q', 3:'第3Q', 4:'第4Q' };
+const COLORS = ['#3b6fd4','#2da87a','#e85c5c','#f59e0b','#8b5cf6','#06b6d4','#ec4899','#14b8a6'];
+
+let currentUser = null;
+let currentQ = 1;
+let gradeFilter = 'ALL';
+let fieldFilter = 'ALL';
+let allSchedules = {};  // uid -> { slots: Set }
+let allUsers = {};      // uid -> { name, grade, field }
+let activeTab = 'my';
+let pendingWrite = false;
+let unsubUsers = null;
+let unsubSchedules = null;
+
+// ---- ユーティリティ ----
+function slotKey(q, di, pi) { return `Q${q}_D${di}_P${pi}`; }
+function colorFor(uid) {
+  let h = 0; for (let c of uid) h = (h*31+c.charCodeAt(0))&0xfffff;
+  return COLORS[h % COLORS.length];
+}
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 2200);
+}
+
+// ---- ユニークID生成（ブラウザ指紋代わり） ----
+function getOrCreateUid() {
+  let uid = localStorage.getItem('lab_scheduler_uid');
+  if (!uid) {
+    uid = 'u_' + Date.now() + '_' + Math.random().toString(36).slice(2, 9);
+    localStorage.setItem('lab_scheduler_uid', uid);
+  }
+  return uid;
+}
+
+// ---- フィルター ----
+function filteredUids() {
+  return Object.keys(allUsers).filter(uid => {
+    const u = allUsers[uid];
+    if (gradeFilter !== 'ALL' && u.grade !== gradeFilter) return false;
+    if (fieldFilter !== 'ALL' && u.field !== fieldFilter) return false;
+    return true;
+  });
+}
+
+// ---- ログイン ----
+async function login() {
+  const name = document.getElementById('name-input').value.trim();
+  const grade = document.getElementById('grade-input').value;
+  const field = document.getElementById('field-input').value.trim();
+  if (!name) { toast('名前を入力してください'); return; }
+  const uid = getOrCreateUid();
+  currentUser = { uid, name, grade, field };
+  try {
+    await rtdb.ref(`users/${uid}`).set({ uid, name, grade, field, lastSeen: Date.now() });
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('header-user').textContent = `${name}（${grade}）`;
+    document.getElementById('app').classList.add('visible');
+    updateQInfo();
+    subscribeAll();
+  } catch(e) {
+    console.error(e); toast('エラー: ' + (e.message || e));
+  }
+}
+
+// ---- セッション復元 ----
+async function tryRestoreSession() {
+  const uid = localStorage.getItem('lab_scheduler_uid');
+  const saved = localStorage.getItem('lab_scheduler_profile');
+  if (!uid || !saved) return;
+  try {
+    const profile = JSON.parse(saved);
+    const snap = await rtdb.ref(`users/${uid}`).get();
+    if (!snap.exists()) return; // 退室済み
+    currentUser = { uid, ...profile };
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('header-user').textContent = `${profile.name}（${profile.grade}）`;
+    document.getElementById('app').classList.add('visible');
+    updateQInfo();
+    subscribeAll();
+  } catch(e) { /* 復元失敗時はログイン画面表示のまま */ }
+}
+
+// login時にプロフィールも保存
+const _origLogin = login;
+async function login() {
+  const name = document.getElementById('name-input').value.trim();
+  const grade = document.getElementById('grade-input').value;
+  const field = document.getElementById('field-input').value.trim();
+  if (!name) { toast('名前を入力してください'); return; }
+  const uid = getOrCreateUid();
+  currentUser = { uid, name, grade, field };
+  localStorage.setItem('lab_scheduler_profile', JSON.stringify({ name, grade, field }));
+  try {
+    await rtdb.ref(`users/${uid}`).set({ uid, name, grade, field, lastSeen: Date.now() });
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('header-user').textContent = `${name}（${grade}）`;
+    document.getElementById('app').classList.add('visible');
+    updateQInfo();
+    subscribeAll();
+  } catch(e) {
+    console.error(e); toast('エラー: ' + (e.message || e));
+  }
+}
+
+function logout() {
+  if (unsubUsers) unsubUsers();
+  if (unsubSchedules) unsubSchedules();
+  currentUser = null; allSchedules = {}; allUsers = {};
+  gradeFilter = 'ALL'; fieldFilter = 'ALL';
+  document.getElementById('app').classList.remove('visible');
+  document.getElementById('login-screen').style.display = 'flex';
+}
+
+// ---- Subscribe ----
+function subscribeAll() {
+  // Users
+  const usersRef = rtdb.ref('users');
+  unsubUsers = usersRef.on('value', snap => {
+    allUsers = {};
+    if (snap.exists()) {
+      snap.forEach(child => {
+        const d = child.val();
+        allUsers[d.uid] = { name: d.name, grade: d.grade||'', field: d.field||'' };
+      });
+    }
+    Object.keys(allUsers).forEach(uid => { if (!allSchedules[uid]) allSchedules[uid] = new Set(); });
+    renderFieldChips();
+    refreshActivePanel();
+  });
+
+  // Schedules
+  const schedRef = rtdb.ref('schedules');
+  unsubSchedules = schedRef.on('value', snap => {
+    allSchedules = {};
+    Object.keys(allUsers).forEach(uid => { allSchedules[uid] = new Set(); });
+    if (snap.exists()) {
+      snap.forEach(child => {
+        const d = child.val();
+        if (!allSchedules[d.uid]) allSchedules[d.uid] = new Set();
+        if (d.slots) Object.keys(d.slots).forEach(k => allSchedules[d.uid].add(k));
+      });
+    }
+    refreshActivePanel();
+  });
+}
+
+// ---- Field chips ----
+function renderFieldChips() {
+  const fields = [...new Set(Object.values(allUsers).map(u => u.field).filter(Boolean))].sort();
+  const container = document.getElementById('field-chips');
+  if (fields.length === 0) { container.innerHTML = '<span style="font-size:11px;color:var(--text-muted);">（未設定）</span>'; return; }
+  let html = `<button class="field-chip${fieldFilter==='ALL'?' active':''}" onclick="toggleField('ALL')">全て</button>`;
+  fields.forEach(f => {
+    html += `<button class="field-chip${fieldFilter===f?' active':''}" onclick="toggleField('${f.replace(/'/g,"\\'")}')">🔖 ${f}</button>`;
+  });
+  container.innerHTML = html;
+}
+
+// ---- フィルター操作 ----
+function toggleGrade(g) {
+  gradeFilter = g;
+  ['ALL','B4','M1','M2'].forEach(v => {
+    const btn = document.getElementById(`g-btn-${v}`);
+    if (btn) btn.classList.toggle('active', v === g);
+  });
+  refreshActivePanel();
+}
+function toggleField(f) {
+  fieldFilter = f;
+  renderFieldChips();
+  refreshActivePanel();
+}
+function selectQ(q) {
+  currentQ = q;
+  [1,2,3,4].forEach(i => document.getElementById(`q-btn-${i}`).classList.toggle('active', i===q));
+  refreshActivePanel();
+}
+
+// ---- Q info ----
+function updateQInfo() {
+  const qName = QUARTERS[currentQ];
+  const tagHTML = () => {
+    let t = '';
+    if (gradeFilter !== 'ALL') t += `<span class="ftag ftag-grade">${gradeFilter}</span>`;
+    if (fieldFilter !== 'ALL') t += `<span class="ftag ftag-field">🔖 ${fieldFilter}</span>`;
+    if (!t) t = `<span class="ftag ftag-all">全員表示</span>`;
+    return t;
+  };
+  ['my','ov','cm'].forEach(p => {
+    const n = document.getElementById(`${p}-q-name`); if(n) n.textContent = qName;
+    const ft = document.getElementById(`${p}-filter-tags`); if(ft) ft.innerHTML = tagHTML();
+  });
+}
+
+function refreshActivePanel() {
+  updateQInfo();
+  if (activeTab==='my') renderMyGrid();
+  else if (activeTab==='overview') renderOverview();
+  else if (activeTab==='common') renderCommon();
+  else if (activeTab==='members') renderMembers();
+}
+
+// ---- My slots ----
+function mySlots() { return allSchedules[currentUser?.uid] || new Set(); }
+
+async function toggleSlot(key) {
+  if (pendingWrite) return;
+  pendingWrite = true;
+  const slots = new Set(mySlots());
+  const wasSet = slots.has(key);
+  if (wasSet) slots.delete(key); else slots.add(key);
+  allSchedules[currentUser.uid] = slots;
+  renderMyGrid();
+  try {
+    const slotsObj = {};
+    slots.forEach(k => { slotsObj[k] = true; });
+    await rtdb.ref(`schedules/${currentUser.uid}`).set({ uid: currentUser.uid, slots: slotsObj });
+    toast(wasSet ? '授業を削除しました' : '授業を登録しました');
+  } catch(e) {
+    console.error(e); toast('保存に失敗しました');
+  } finally { pendingWrite = false; }
+}
+
+// ---- Grid builder ----
+function buildGrid(gridEl, cellFn, cols) {
+  gridEl.style.gridTemplateColumns = `120px repeat(${cols}, 1fr)`;
+  let html = `<div class="time-label" style="min-height:44px;align-items:flex-end;padding-bottom:6px;font-size:11px;font-weight:700;">講時</div>`;
+  DAYS.forEach(d => { html += `<div class="day-header">${d}曜日</div>`; });
+  PERIODS.forEach((p, pi) => {
+    html += `<div class="time-label"><div><div style="font-weight:700;font-size:11px;">${p.label}</div><div style="font-size:9px;margin-top:2px;">${p.time}</div></div></div>`;
+    DAYS.forEach((_, di) => { html += `<div class="grid-cell">${cellFn(di, pi)}</div>`; });
+  });
+  gridEl.innerHTML = html;
+}
+
+// ---- My grid ----
+function renderMyGrid() {
+  const grid = document.getElementById('my-grid');
+  const slots = mySlots();
+  buildGrid(grid, (di, pi) => {
+    const key = slotKey(currentQ, di, pi);
+    const hasBusy = slots.has(key);
+    return `<button class="slot-btn${hasBusy?' busy':''}" onclick="toggleSlot('${key}')">${hasBusy?'×':''}</button>`;
+  }, 5);
+}
+
+// ---- Overview ----
+function renderOverview() {
+  document.getElementById('overview-loading').style.display = 'none';
+  document.getElementById('overview-content').style.display = 'block';
+  const uids = filteredUids();
+  const grid = document.getElementById('overview-grid');
+  grid.style.display = 'grid'; grid.style.minWidth = '480px';
+  if (uids.length === 0) {
+    grid.innerHTML = '<div class="empty-state"><div class="icon">👥</div><p>該当するメンバーがいません</p></div>'; return;
+  }
+  buildGrid(grid, (di, pi) => {
+    const key = slotKey(currentQ, di, pi);
+    const busyUids = uids.filter(uid => (allSchedules[uid]||new Set()).has(key));
+    const freeUids = uids.filter(uid => !busyUids.includes(uid));
+    const n = freeUids.length, total = uids.length;
+    if (n === 0) return `<div style="min-height:42px;background:#fee2e2;border-radius:4px;display:flex;align-items:center;justify-content:center;"><span style="font-size:11px;font-weight:700;color:var(--busy);">全員授業</span></div>`;
+    const color = n===total ? 'var(--free)' : n>total/2 ? 'var(--accent)' : 'var(--common)';
+    const bg = n===total ? 'var(--accent2-light)' : 'var(--accent-light)';
+    const names = freeUids.map(uid => allUsers[uid]?.name||uid).join(', ');
+    return `<div style="background:${bg};border-radius:4px;min-height:42px;display:flex;align-items:center;justify-content:center;" title="${names}">
+      <span style="font-size:13px;font-weight:700;color:${color};">${n}/${total}</span></div>`;
+  }, 5);
+}
+
+// ---- Common free ----
+function renderCommon() {
+  document.getElementById('common-loading').style.display = 'none';
+  const container = document.getElementById('common-content');
+  container.style.display = 'block';
+  const uids = filteredUids();
+  if (uids.length < 2) {
+    container.innerHTML = '<div class="empty-state"><div class="icon">🤝</div><p>共通の空き時間を調べるには<br>2人以上のメンバーが必要です</p></div>'; return;
+  }
+  const byDay = DAYS.map(() => []);
+  DAYS.forEach((_, di) => {
+    PERIODS.forEach((p, pi) => {
+      const key = slotKey(currentQ, di, pi);
+      const freeUids = uids.filter(uid => !(allSchedules[uid]||new Set()).has(key));
+      if (freeUids.length >= 2) byDay[di].push({ pi, p, freeUids });
+    });
+  });
+  if (!byDay.some(s => s.length)) {
+    container.innerHTML = `<div class="empty-state"><div class="icon">😅</div><p>${QUARTERS[currentQ]}に共通の空き時間がありません</p></div>`; return;
+  }
+  let html = '';
+  DAYS.forEach((day, di) => {
+    if (!byDay[di].length) return;
+    html += `<div class="section-title">${day}曜日</div>`;
+    byDay[di].forEach(({ p, freeUids }) => {
+      const names = freeUids.map(uid => allUsers[uid]?.name||uid).join(', ');
+      const allFree = freeUids.length === uids.length;
+      html += `<div class="common-result-card" style="border-left-color:${allFree?'var(--free)':'var(--accent)'}">
+        <h3>🕐 ${p.label} <span style="font-size:12px;font-weight:400;color:var(--text-muted);">${p.time}</span></h3>
+        <p style="margin-top:6px;">${names} <span class="badge badge-green">${freeUids.length}人</span></p>
+        ${allFree?'<p style="margin-top:4px;font-size:11px;color:var(--free);font-weight:600;">✓ 全員空き</p>':''}
+      </div>`;
+    });
+  });
+  container.innerHTML = html;
+}
+
+// ---- Members ----
+function renderMembers() {
+  document.getElementById('members-loading').style.display = 'none';
+  const container = document.getElementById('members-content');
+  container.style.display = 'block';
+  const uids = Object.keys(allUsers);
+  if (uids.length === 0) {
+    container.innerHTML = '<div class="empty-state"><div class="icon">👤</div><p>まだメンバーがいません</p></div>'; return;
+  }
+  const grades = ['B4','M1','M2'];
+  const byGrade = {};
+  grades.forEach(g => { byGrade[g] = uids.filter(uid => allUsers[uid].grade === g); });
+  const noGrade = uids.filter(uid => !grades.includes(allUsers[uid].grade));
+  let html = '';
+  const renderGroup = (label, groupUids) => {
+    if (!groupUids.length) return;
+    const shown = fieldFilter === 'ALL' ? groupUids : groupUids.filter(uid => allUsers[uid].field === fieldFilter);
+    if (!shown.length) return;
+    html += `<div class="section-title">${label}</div><div class="member-list">`;
+    shown.forEach(uid => {
+      const u = allUsers[uid];
+      const color = colorFor(uid);
+      const qBusy = Array.from(allSchedules[uid]||[]).filter(k=>k.startsWith(`Q${currentQ}_`)).length;
+      const qSlots = DAYS.length * PERIODS.length - qBusy;
+      const isMe = uid === currentUser?.uid;
+      const gradeClass = `grade-${u.grade}`;
+      html += `<div class="member-item">
+        <div class="member-avatar" style="background:${color}20;color:${color};">${u.name[0]}</div>
+        <div style="flex:1;min-width:0;">
+          <div class="member-name">${u.name}${isMe?' (自分)':''}</div>
+          <div class="member-sub">
+            ${u.grade?`<span class="grade-pill ${gradeClass}">${u.grade}</span>`:''}
+            ${u.field?`<span class="field-pill">🔖 ${u.field}</span>`:''}
+            <span>${QUARTERS[currentQ]} 空き: ${qSlots}コマ / 授業: ${qBusy}コマ</span>
+          </div>
+        </div>
+        ${!isMe
+          ? `<button class="btn btn-sm btn-danger" onclick="showAdminDeleteModal('${uid}')" title="管理者として削除">🗑</button>`
+          : `<button class="btn btn-sm btn-danger" onclick="showLeaveModal()">退室</button>`}
+      </div>`;
+    });
+    html += '</div>';
+  };
+  grades.forEach(g => renderGroup(g, byGrade[g]));
+  if (noGrade.length) renderGroup('その他', noGrade);
+  container.innerHTML = html || '<div class="empty-state"><div class="icon">🔍</div><p>該当するメンバーがいません</p></div>';
+}
+
+// ---- 退室 ----
+function showLeaveModal() { document.getElementById('leave-modal').style.display = 'flex'; }
+async function leaveAccount() {
+  closeModal('leave-modal');
+  try {
+    const uid = currentUser.uid;
+    await rtdb.ref(`users/${uid}`).remove();
+    await rtdb.ref(`schedules/${uid}`).remove().catch(()=>{});
+    localStorage.removeItem('lab_scheduler_profile');
+    toast('退室しました。ご利用ありがとうございました。');
+    setTimeout(() => logout(), 1500);
+  } catch(e) { console.error(e); toast('エラーが発生しました'); }
+}
+
+// ---- 管理者削除 ----
+let adminTargetUid = null;
+function showAdminDeleteModal(uid) {
+  adminTargetUid = uid;
+  const name = allUsers[uid]?.name || uid;
+  document.getElementById('admin-modal-desc').textContent = `「${name}」のデータをすべて削除します。管理者パスワードを入力してください。`;
+  document.getElementById('admin-pw-input').value = '';
+  document.getElementById('admin-modal').style.display = 'flex';
+}
+async function adminDelete() {
+  const pw = document.getElementById('admin-pw-input').value;
+  if (pw !== ADMIN_PASSWORD) { toast('パスワードが違います'); return; }
+  closeModal('admin-modal');
+  try {
+    await rtdb.ref(`users/${adminTargetUid}`).remove();
+    await rtdb.ref(`schedules/${adminTargetUid}`).remove().catch(()=>{});
+    toast('メンバーを削除しました');
+    adminTargetUid = null;
+  } catch(e) { console.error(e); toast('エラーが発生しました'); }
+}
+function closeModal(id) { document.getElementById(id).style.display = 'none'; }
+
+// ---- Tab switch ----
+function switchTab(name) {
+  activeTab = name;
+  const tabs = ['my','overview','common','members'];
+  document.querySelectorAll('.tab').forEach((t,i) => t.classList.toggle('active', tabs[i]===name));
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('panel-'+name).classList.add('active');
+  refreshActivePanel();
+}
+
+// ---- Init ----
+updateQInfo();
+tryRestoreSession();
+</script>
+</body>
+</html>
