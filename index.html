@@ -380,14 +380,13 @@ async function tryRestoreSession() {
     currentUser = { uid, ...profile };
     document.getElementById('login-screen').style.display = 'none';
     document.getElementById('header-user').textContent = `${profile.name}（${profile.grade}）`;
+    document.querySelector('header').style.display = 'flex';
     document.getElementById('app').classList.add('visible');
     updateQInfo();
     subscribeAll();
   } catch(e) { /* 復元失敗時はログイン画面表示のまま */ }
 }
 
-// login時にプロフィールも保存
-const _origLogin = login;
 async function login() {
   const name = document.getElementById('name-input').value.trim();
   const grade = document.getElementById('grade-input').value;
@@ -400,6 +399,7 @@ async function login() {
     await rtdb.ref(`users/${uid}`).set({ uid, name, grade, field, lastSeen: Date.now() });
     document.getElementById('login-screen').style.display = 'none';
     document.getElementById('header-user').textContent = `${name}（${grade}）`;
+    document.querySelector('header').style.display = 'flex';
     document.getElementById('app').classList.add('visible');
     updateQInfo();
     subscribeAll();
@@ -409,13 +409,23 @@ async function login() {
 }
 
 function logout() {
-  if (unsubUsers) unsubUsers();
-  if (unsubSchedules) unsubSchedules();
+  // Firebaseのリスナーを解除
+  if (unsubUsers) { rtdb.ref('users').off('value', unsubUsers); unsubUsers = null; }
+  if (unsubSchedules) { rtdb.ref('schedules').off('value', unsubSchedules); unsubSchedules = null; }
   currentUser = null; allSchedules = {}; allUsers = {};
-  gradeFilter = 'ALL'; fieldFilter = 'ALL';
+  gradeFilter = 'ALL'; fieldFilter = 'ALL'; activeTab = 'my';
+  // タブをリセット
+  document.querySelectorAll('.tab').forEach((t,i) => t.classList.toggle('active', i===0));
+  document.querySelectorAll('.panel').forEach((p,i) => { p.classList.toggle('active', i===0); });
+  // 画面切り替え
   document.getElementById('app').classList.remove('visible');
   document.getElementById('login-screen').style.display = 'flex';
+  // ログイン画面のヘッダーを非表示
+  document.querySelector('header').style.display = 'none';
 }
+
+// ヘッダーは最初非表示
+document.querySelector('header').style.display = 'none';
 
 // ---- Subscribe ----
 function subscribeAll() {
