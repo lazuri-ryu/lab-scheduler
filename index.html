@@ -29,7 +29,7 @@
   html,body{height:100%;font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text);}
   body{display:flex;flex-direction:column;min-height:100%;}
 
-  header{background:var(--surface);border-bottom:1px solid var(--border);padding:12px 20px;display:flex;align-items:center;gap:12px;position:sticky;top:env(safe-area-inset-top,0px);z-index:100;box-shadow:var(--shadow);}
+  header{background:var(--surface);border-bottom:1px solid var(--border);padding:12px 20px;display:none;align-items:center;gap:12px;position:sticky;top:env(safe-area-inset-top,0px);z-index:100;box-shadow:var(--shadow);}
   .logo{font-size:20px;}
   header h1{font-size:15px;font-weight:700;letter-spacing:.02em;}
   header p{font-size:11px;color:var(--text-muted);margin-top:1px;}
@@ -273,12 +273,10 @@
   </div>
 </div>
 
-<!-- Firebase SDK -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/firebase/10.12.2/firebase-app-compat.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/firebase/10.12.2/firebase-database-compat.min.js"></script>
 
 <script>
-// ---- Firebase 設定 ----
 const firebaseConfig = {
   apiKey: "AIzaSyAoc-IoYmPcppcuxCevY8NKF4s10AymF7A",
   authDomain: "lab-scheduler-744fa.firebaseapp.com",
@@ -291,7 +289,6 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const rtdb = firebase.database();
 
-// ---- 定数 ----
 const ADMIN_PASSWORD = 'wsp-lab-admin';
 const DAYS = ['月','火','水','木','金'];
 const PERIODS = [
@@ -309,14 +306,13 @@ let currentUser = null;
 let currentQ = 1;
 let gradeFilter = 'ALL';
 let fieldFilter = 'ALL';
-let allSchedules = {};  // uid -> { slots: Set }
-let allUsers = {};      // uid -> { name, grade, field }
+let allSchedules = {};
+let allUsers = {};
 let activeTab = 'my';
 let pendingWrite = false;
 let unsubUsers = null;
 let unsubSchedules = null;
 
-// ---- ユーティリティ ----
 function slotKey(q, di, pi) { return `Q${q}_D${di}_P${pi}`; }
 function colorFor(uid) {
   let h = 0; for (let c of uid) h = (h*31+c.charCodeAt(0))&0xfffff;
@@ -327,8 +323,6 @@ function toast(msg) {
   el.textContent = msg; el.classList.add('show');
   setTimeout(() => el.classList.remove('show'), 2200);
 }
-
-// ---- ユニークID生成（ブラウザ指紋代わり） ----
 function getOrCreateUid() {
   let uid = localStorage.getItem('lab_scheduler_uid');
   if (!uid) {
@@ -337,8 +331,6 @@ function getOrCreateUid() {
   }
   return uid;
 }
-
-// ---- フィルター ----
 function filteredUids() {
   return Object.keys(allUsers).filter(uid => {
     const u = allUsers[uid];
@@ -348,45 +340,7 @@ function filteredUids() {
   });
 }
 
-// ---- ログイン ----
-async function login() {
-  const name = document.getElementById('name-input').value.trim();
-  const grade = document.getElementById('grade-input').value;
-  const field = document.getElementById('field-input').value.trim();
-  if (!name) { toast('名前を入力してください'); return; }
-  const uid = getOrCreateUid();
-  currentUser = { uid, name, grade, field };
-  try {
-    await rtdb.ref(`users/${uid}`).set({ uid, name, grade, field, lastSeen: Date.now() });
-    document.getElementById('login-screen').style.display = 'none';
-    document.getElementById('header-user').textContent = `${name}（${grade}）`;
-    document.getElementById('app').classList.add('visible');
-    updateQInfo();
-    subscribeAll();
-  } catch(e) {
-    console.error(e); toast('エラー: ' + (e.message || e));
-  }
-}
-
-// ---- セッション復元 ----
-async function tryRestoreSession() {
-  const uid = localStorage.getItem('lab_scheduler_uid');
-  const saved = localStorage.getItem('lab_scheduler_profile');
-  if (!uid || !saved) return;
-  try {
-    const profile = JSON.parse(saved);
-    const snap = await rtdb.ref(`users/${uid}`).get();
-    if (!snap.exists()) return; // 退室済み
-    currentUser = { uid, ...profile };
-    document.getElementById('login-screen').style.display = 'none';
-    document.getElementById('header-user').textContent = `${profile.name}（${profile.grade}）`;
-    document.querySelector('header').style.display = 'flex';
-    document.getElementById('app').classList.add('visible');
-    updateQInfo();
-    subscribeAll();
-  } catch(e) { /* 復元失敗時はログイン画面表示のまま */ }
-}
-
+// ---- ログイン（1つだけ） ----
 async function login() {
   const name = document.getElementById('name-input').value.trim();
   const grade = document.getElementById('grade-input').value;
@@ -397,114 +351,101 @@ async function login() {
   localStorage.setItem('lab_scheduler_profile', JSON.stringify({ name, grade, field }));
   try {
     await rtdb.ref(`users/${uid}`).set({ uid, name, grade, field, lastSeen: Date.now() });
-    document.getElementById('login-screen').style.display = 'none';
-    document.getElementById('header-user').textContent = `${name}（${grade}）`;
-    document.querySelector('header').style.display = 'flex';
-    document.getElementById('app').classList.add('visible');
-    updateQInfo();
-    subscribeAll();
+    showApp(name, grade);
   } catch(e) {
     console.error(e); toast('エラー: ' + (e.message || e));
   }
 }
 
+function showApp(name, grade) {
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('header-user').textContent = `${name}（${grade}）`;
+  document.querySelector('header').style.display = 'flex';
+  document.getElementById('app').classList.add('visible');
+  updateQInfo();
+  subscribeAll();
+}
+
+// ---- セッション復元 ----
+async function tryRestoreSession() {
+  const uid = localStorage.getItem('lab_scheduler_uid');
+  const saved = localStorage.getItem('lab_scheduler_profile');
+  if (!uid || !saved) return;
+  try {
+    const profile = JSON.parse(saved);
+    const snap = await rtdb.ref(`users/${uid}`).get();
+    if (!snap.exists()) { localStorage.removeItem('lab_scheduler_profile'); return; }
+    currentUser = { uid, ...profile };
+    showApp(profile.name, profile.grade);
+  } catch(e) { /* 復元失敗時はログイン画面のまま */ }
+}
+
+// ---- ログアウト ----
 function logout() {
-  // Firebaseのリスナーを解除
   if (unsubUsers) { rtdb.ref('users').off('value', unsubUsers); unsubUsers = null; }
   if (unsubSchedules) { rtdb.ref('schedules').off('value', unsubSchedules); unsubSchedules = null; }
   currentUser = null; allSchedules = {}; allUsers = {};
   gradeFilter = 'ALL'; fieldFilter = 'ALL'; activeTab = 'my';
-  // タブをリセット
   document.querySelectorAll('.tab').forEach((t,i) => t.classList.toggle('active', i===0));
-  document.querySelectorAll('.panel').forEach((p,i) => { p.classList.toggle('active', i===0); });
-  // 画面切り替え
+  document.querySelectorAll('.panel').forEach((p,i) => p.classList.toggle('active', i===0));
   document.getElementById('app').classList.remove('visible');
-  document.getElementById('login-screen').style.display = 'flex';
-  // ログイン画面のヘッダーを非表示
   document.querySelector('header').style.display = 'none';
+  document.getElementById('login-screen').style.display = 'flex';
 }
-
-// ヘッダーは最初非表示
-document.querySelector('header').style.display = 'none';
 
 // ---- Subscribe ----
 function subscribeAll() {
-  // Users
-  const usersRef = rtdb.ref('users');
-  unsubUsers = usersRef.on('value', snap => {
+  unsubUsers = rtdb.ref('users').on('value', snap => {
     allUsers = {};
-    if (snap.exists()) {
-      snap.forEach(child => {
-        const d = child.val();
-        allUsers[d.uid] = { name: d.name, grade: d.grade||'', field: d.field||'' };
-      });
-    }
+    if (snap.exists()) snap.forEach(c => { const d=c.val(); allUsers[d.uid]={name:d.name,grade:d.grade||'',field:d.field||''}; });
     Object.keys(allUsers).forEach(uid => { if (!allSchedules[uid]) allSchedules[uid] = new Set(); });
-    renderFieldChips();
-    refreshActivePanel();
+    renderFieldChips(); refreshActivePanel();
   });
-
-  // Schedules
-  const schedRef = rtdb.ref('schedules');
-  unsubSchedules = schedRef.on('value', snap => {
+  unsubSchedules = rtdb.ref('schedules').on('value', snap => {
     allSchedules = {};
     Object.keys(allUsers).forEach(uid => { allSchedules[uid] = new Set(); });
-    if (snap.exists()) {
-      snap.forEach(child => {
-        const d = child.val();
-        if (!allSchedules[d.uid]) allSchedules[d.uid] = new Set();
-        if (d.slots) Object.keys(d.slots).forEach(k => allSchedules[d.uid].add(k));
-      });
-    }
+    if (snap.exists()) snap.forEach(c => {
+      const d=c.val();
+      if (!allSchedules[d.uid]) allSchedules[d.uid]=new Set();
+      if (d.slots) Object.keys(d.slots).forEach(k => allSchedules[d.uid].add(k));
+    });
     refreshActivePanel();
   });
 }
 
-// ---- Field chips ----
 function renderFieldChips() {
-  const fields = [...new Set(Object.values(allUsers).map(u => u.field).filter(Boolean))].sort();
-  const container = document.getElementById('field-chips');
-  if (fields.length === 0) { container.innerHTML = '<span style="font-size:11px;color:var(--text-muted);">（未設定）</span>'; return; }
-  let html = `<button class="field-chip${fieldFilter==='ALL'?' active':''}" onclick="toggleField('ALL')">全て</button>`;
-  fields.forEach(f => {
-    html += `<button class="field-chip${fieldFilter===f?' active':''}" onclick="toggleField('${f.replace(/'/g,"\\'")}')">🔖 ${f}</button>`;
-  });
-  container.innerHTML = html;
+  const fields = [...new Set(Object.values(allUsers).map(u=>u.field).filter(Boolean))].sort();
+  const c = document.getElementById('field-chips');
+  if (!fields.length) { c.innerHTML='<span style="font-size:11px;color:var(--text-muted);">（未設定）</span>'; return; }
+  let h = `<button class="field-chip${fieldFilter==='ALL'?' active':''}" onclick="toggleField('ALL')">全て</button>`;
+  fields.forEach(f => { h+=`<button class="field-chip${fieldFilter===f?' active':''}" onclick="toggleField('${f.replace(/'/g,"\\'")}')">🔖 ${f}</button>`; });
+  c.innerHTML = h;
 }
 
-// ---- フィルター操作 ----
 function toggleGrade(g) {
   gradeFilter = g;
-  ['ALL','B4','M1','M2'].forEach(v => {
-    const btn = document.getElementById(`g-btn-${v}`);
-    if (btn) btn.classList.toggle('active', v === g);
-  });
+  ['ALL','B4','M1','M2'].forEach(v => { const b=document.getElementById(`g-btn-${v}`); if(b) b.classList.toggle('active',v===g); });
   refreshActivePanel();
 }
-function toggleField(f) {
-  fieldFilter = f;
-  renderFieldChips();
-  refreshActivePanel();
-}
+function toggleField(f) { fieldFilter=f; renderFieldChips(); refreshActivePanel(); }
 function selectQ(q) {
-  currentQ = q;
-  [1,2,3,4].forEach(i => document.getElementById(`q-btn-${i}`).classList.toggle('active', i===q));
+  currentQ=q;
+  [1,2,3,4].forEach(i => document.getElementById(`q-btn-${i}`).classList.toggle('active',i===q));
   refreshActivePanel();
 }
 
-// ---- Q info ----
 function updateQInfo() {
   const qName = QUARTERS[currentQ];
   const tagHTML = () => {
-    let t = '';
-    if (gradeFilter !== 'ALL') t += `<span class="ftag ftag-grade">${gradeFilter}</span>`;
-    if (fieldFilter !== 'ALL') t += `<span class="ftag ftag-field">🔖 ${fieldFilter}</span>`;
-    if (!t) t = `<span class="ftag ftag-all">全員表示</span>`;
+    let t='';
+    if (gradeFilter!=='ALL') t+=`<span class="ftag ftag-grade">${gradeFilter}</span>`;
+    if (fieldFilter!=='ALL') t+=`<span class="ftag ftag-field">🔖 ${fieldFilter}</span>`;
+    if (!t) t=`<span class="ftag ftag-all">全員表示</span>`;
     return t;
   };
   ['my','ov','cm'].forEach(p => {
-    const n = document.getElementById(`${p}-q-name`); if(n) n.textContent = qName;
-    const ft = document.getElementById(`${p}-filter-tags`); if(ft) ft.innerHTML = tagHTML();
+    const n=document.getElementById(`${p}-q-name`); if(n) n.textContent=qName;
+    const ft=document.getElementById(`${p}-filter-tags`); if(ft) ft.innerHTML=tagHTML();
   });
 }
 
@@ -516,7 +457,6 @@ function refreshActivePanel() {
   else if (activeTab==='members') renderMembers();
 }
 
-// ---- My slots ----
 function mySlots() { return allSchedules[currentUser?.uid] || new Set(); }
 
 async function toggleSlot(key) {
@@ -528,194 +468,162 @@ async function toggleSlot(key) {
   allSchedules[currentUser.uid] = slots;
   renderMyGrid();
   try {
-    const slotsObj = {};
-    slots.forEach(k => { slotsObj[k] = true; });
-    await rtdb.ref(`schedules/${currentUser.uid}`).set({ uid: currentUser.uid, slots: slotsObj });
-    toast(wasSet ? '授業を削除しました' : '授業を登録しました');
-  } catch(e) {
-    console.error(e); toast('保存に失敗しました');
-  } finally { pendingWrite = false; }
+    const obj={}; slots.forEach(k=>{obj[k]=true;});
+    await rtdb.ref(`schedules/${currentUser.uid}`).set({uid:currentUser.uid,slots:obj});
+    toast(wasSet?'授業を削除しました':'授業を登録しました');
+  } catch(e) { console.error(e); toast('保存に失敗しました'); }
+  finally { pendingWrite=false; }
 }
 
-// ---- Grid builder ----
 function buildGrid(gridEl, cellFn, cols) {
-  gridEl.style.gridTemplateColumns = `120px repeat(${cols}, 1fr)`;
-  let html = `<div class="time-label" style="min-height:44px;align-items:flex-end;padding-bottom:6px;font-size:11px;font-weight:700;">講時</div>`;
-  DAYS.forEach(d => { html += `<div class="day-header">${d}曜日</div>`; });
-  PERIODS.forEach((p, pi) => {
-    html += `<div class="time-label"><div><div style="font-weight:700;font-size:11px;">${p.label}</div><div style="font-size:9px;margin-top:2px;">${p.time}</div></div></div>`;
-    DAYS.forEach((_, di) => { html += `<div class="grid-cell">${cellFn(di, pi)}</div>`; });
+  gridEl.style.gridTemplateColumns=`120px repeat(${cols},1fr)`;
+  let h=`<div class="time-label" style="min-height:44px;align-items:flex-end;padding-bottom:6px;font-size:11px;font-weight:700;">講時</div>`;
+  DAYS.forEach(d=>{h+=`<div class="day-header">${d}曜日</div>`;});
+  PERIODS.forEach((p,pi)=>{
+    h+=`<div class="time-label"><div><div style="font-weight:700;font-size:11px;">${p.label}</div><div style="font-size:9px;margin-top:2px;">${p.time}</div></div></div>`;
+    DAYS.forEach((_,di)=>{h+=`<div class="grid-cell">${cellFn(di,pi)}</div>`;});
   });
-  gridEl.innerHTML = html;
+  gridEl.innerHTML=h;
 }
 
-// ---- My grid ----
 function renderMyGrid() {
-  const grid = document.getElementById('my-grid');
-  const slots = mySlots();
-  buildGrid(grid, (di, pi) => {
-    const key = slotKey(currentQ, di, pi);
-    const hasBusy = slots.has(key);
-    return `<button class="slot-btn${hasBusy?' busy':''}" onclick="toggleSlot('${key}')">${hasBusy?'×':''}</button>`;
-  }, 5);
+  const grid=document.getElementById('my-grid');
+  const slots=mySlots();
+  buildGrid(grid,(di,pi)=>{
+    const key=slotKey(currentQ,di,pi);
+    const busy=slots.has(key);
+    return `<button class="slot-btn${busy?' busy':''}" onclick="toggleSlot('${key}')">${busy?'×':''}</button>`;
+  },5);
 }
 
-// ---- Overview ----
 function renderOverview() {
-  document.getElementById('overview-loading').style.display = 'none';
-  document.getElementById('overview-content').style.display = 'block';
-  const uids = filteredUids();
-  const grid = document.getElementById('overview-grid');
-  grid.style.display = 'grid'; grid.style.minWidth = '480px';
-  if (uids.length === 0) {
-    grid.innerHTML = '<div class="empty-state"><div class="icon">👥</div><p>該当するメンバーがいません</p></div>'; return;
-  }
-  buildGrid(grid, (di, pi) => {
-    const key = slotKey(currentQ, di, pi);
-    const busyUids = uids.filter(uid => (allSchedules[uid]||new Set()).has(key));
-    const freeUids = uids.filter(uid => !busyUids.includes(uid));
-    const n = freeUids.length, total = uids.length;
-    if (n === 0) return `<div style="min-height:42px;background:#fee2e2;border-radius:4px;display:flex;align-items:center;justify-content:center;"><span style="font-size:11px;font-weight:700;color:var(--busy);">全員授業</span></div>`;
-    const color = n===total ? 'var(--free)' : n>total/2 ? 'var(--accent)' : 'var(--common)';
-    const bg = n===total ? 'var(--accent2-light)' : 'var(--accent-light)';
-    const names = freeUids.map(uid => allUsers[uid]?.name||uid).join(', ');
-    return `<div style="background:${bg};border-radius:4px;min-height:42px;display:flex;align-items:center;justify-content:center;" title="${names}">
-      <span style="font-size:13px;font-weight:700;color:${color};">${n}/${total}</span></div>`;
-  }, 5);
+  document.getElementById('overview-loading').style.display='none';
+  document.getElementById('overview-content').style.display='block';
+  const uids=filteredUids();
+  const grid=document.getElementById('overview-grid');
+  grid.style.display='grid'; grid.style.minWidth='480px';
+  if (!uids.length) { grid.innerHTML='<div class="empty-state"><div class="icon">👥</div><p>該当するメンバーがいません</p></div>'; return; }
+  buildGrid(grid,(di,pi)=>{
+    const key=slotKey(currentQ,di,pi);
+    const busyU=uids.filter(u=>(allSchedules[u]||new Set()).has(key));
+    const freeU=uids.filter(u=>!busyU.includes(u));
+    const n=freeU.length,total=uids.length;
+    if (!n) return `<div style="min-height:42px;background:#fee2e2;border-radius:4px;display:flex;align-items:center;justify-content:center;"><span style="font-size:11px;font-weight:700;color:var(--busy);">全員授業</span></div>`;
+    const color=n===total?'var(--free)':n>total/2?'var(--accent)':'var(--common)';
+    const bg=n===total?'var(--accent2-light)':'var(--accent-light)';
+    const names=freeU.map(u=>allUsers[u]?.name||u).join(', ');
+    return `<div style="background:${bg};border-radius:4px;min-height:42px;display:flex;align-items:center;justify-content:center;" title="${names}"><span style="font-size:13px;font-weight:700;color:${color};">${n}/${total}</span></div>`;
+  },5);
 }
 
-// ---- Common free ----
 function renderCommon() {
-  document.getElementById('common-loading').style.display = 'none';
-  const container = document.getElementById('common-content');
-  container.style.display = 'block';
-  const uids = filteredUids();
-  if (uids.length < 2) {
-    container.innerHTML = '<div class="empty-state"><div class="icon">🤝</div><p>共通の空き時間を調べるには<br>2人以上のメンバーが必要です</p></div>'; return;
-  }
-  const byDay = DAYS.map(() => []);
-  DAYS.forEach((_, di) => {
-    PERIODS.forEach((p, pi) => {
-      const key = slotKey(currentQ, di, pi);
-      const freeUids = uids.filter(uid => !(allSchedules[uid]||new Set()).has(key));
-      if (freeUids.length >= 2) byDay[di].push({ pi, p, freeUids });
-    });
-  });
-  if (!byDay.some(s => s.length)) {
-    container.innerHTML = `<div class="empty-state"><div class="icon">😅</div><p>${QUARTERS[currentQ]}に共通の空き時間がありません</p></div>`; return;
-  }
-  let html = '';
-  DAYS.forEach((day, di) => {
+  document.getElementById('common-loading').style.display='none';
+  const c=document.getElementById('common-content'); c.style.display='block';
+  const uids=filteredUids();
+  if (uids.length<2) { c.innerHTML='<div class="empty-state"><div class="icon">🤝</div><p>共通の空き時間を調べるには<br>2人以上のメンバーが必要です</p></div>'; return; }
+  const byDay=DAYS.map(()=>[]);
+  DAYS.forEach((_,di)=>PERIODS.forEach((p,pi)=>{
+    const key=slotKey(currentQ,di,pi);
+    const freeU=uids.filter(u=>!(allSchedules[u]||new Set()).has(key));
+    if (freeU.length>=2) byDay[di].push({p,freeU});
+  }));
+  if (!byDay.some(s=>s.length)) { c.innerHTML=`<div class="empty-state"><div class="icon">😅</div><p>${QUARTERS[currentQ]}に共通の空き時間がありません</p></div>`; return; }
+  let h='';
+  DAYS.forEach((day,di)=>{
     if (!byDay[di].length) return;
-    html += `<div class="section-title">${day}曜日</div>`;
-    byDay[di].forEach(({ p, freeUids }) => {
-      const names = freeUids.map(uid => allUsers[uid]?.name||uid).join(', ');
-      const allFree = freeUids.length === uids.length;
-      html += `<div class="common-result-card" style="border-left-color:${allFree?'var(--free)':'var(--accent)'}">
+    h+=`<div class="section-title">${day}曜日</div>`;
+    byDay[di].forEach(({p,freeU})=>{
+      const names=freeU.map(u=>allUsers[u]?.name||u).join(', ');
+      const all=freeU.length===uids.length;
+      h+=`<div class="common-result-card" style="border-left-color:${all?'var(--free)':'var(--accent)'}">
         <h3>🕐 ${p.label} <span style="font-size:12px;font-weight:400;color:var(--text-muted);">${p.time}</span></h3>
-        <p style="margin-top:6px;">${names} <span class="badge badge-green">${freeUids.length}人</span></p>
-        ${allFree?'<p style="margin-top:4px;font-size:11px;color:var(--free);font-weight:600;">✓ 全員空き</p>':''}
+        <p style="margin-top:6px;">${names} <span class="badge badge-green">${freeU.length}人</span></p>
+        ${all?'<p style="margin-top:4px;font-size:11px;color:var(--free);font-weight:600;">✓ 全員空き</p>':''}
       </div>`;
     });
   });
-  container.innerHTML = html;
+  c.innerHTML=h;
 }
 
-// ---- Members ----
 function renderMembers() {
-  document.getElementById('members-loading').style.display = 'none';
-  const container = document.getElementById('members-content');
-  container.style.display = 'block';
-  const uids = Object.keys(allUsers);
-  if (uids.length === 0) {
-    container.innerHTML = '<div class="empty-state"><div class="icon">👤</div><p>まだメンバーがいません</p></div>'; return;
-  }
-  const grades = ['B4','M1','M2'];
-  const byGrade = {};
-  grades.forEach(g => { byGrade[g] = uids.filter(uid => allUsers[uid].grade === g); });
-  const noGrade = uids.filter(uid => !grades.includes(allUsers[uid].grade));
-  let html = '';
-  const renderGroup = (label, groupUids) => {
-    if (!groupUids.length) return;
-    const shown = fieldFilter === 'ALL' ? groupUids : groupUids.filter(uid => allUsers[uid].field === fieldFilter);
+  document.getElementById('members-loading').style.display='none';
+  const c=document.getElementById('members-content'); c.style.display='block';
+  const uids=Object.keys(allUsers);
+  if (!uids.length) { c.innerHTML='<div class="empty-state"><div class="icon">👤</div><p>まだメンバーがいません</p></div>'; return; }
+  const grades=['B4','M1','M2'];
+  const byGrade={}; grades.forEach(g=>{byGrade[g]=uids.filter(u=>allUsers[u].grade===g);});
+  const noGrade=uids.filter(u=>!grades.includes(allUsers[u].grade));
+  let h='';
+  const renderGroup=(label,gUids)=>{
+    if (!gUids.length) return;
+    const shown=fieldFilter==='ALL'?gUids:gUids.filter(u=>allUsers[u].field===fieldFilter);
     if (!shown.length) return;
-    html += `<div class="section-title">${label}</div><div class="member-list">`;
-    shown.forEach(uid => {
-      const u = allUsers[uid];
-      const color = colorFor(uid);
-      const qBusy = Array.from(allSchedules[uid]||[]).filter(k=>k.startsWith(`Q${currentQ}_`)).length;
-      const qSlots = DAYS.length * PERIODS.length - qBusy;
-      const isMe = uid === currentUser?.uid;
-      const gradeClass = `grade-${u.grade}`;
-      html += `<div class="member-item">
+    h+=`<div class="section-title">${label}</div><div class="member-list">`;
+    shown.forEach(uid=>{
+      const u=allUsers[uid],color=colorFor(uid);
+      const qBusy=Array.from(allSchedules[uid]||[]).filter(k=>k.startsWith(`Q${currentQ}_`)).length;
+      const qSlots=DAYS.length*PERIODS.length-qBusy;
+      const isMe=uid===currentUser?.uid;
+      h+=`<div class="member-item">
         <div class="member-avatar" style="background:${color}20;color:${color};">${u.name[0]}</div>
         <div style="flex:1;min-width:0;">
           <div class="member-name">${u.name}${isMe?' (自分)':''}</div>
           <div class="member-sub">
-            ${u.grade?`<span class="grade-pill ${gradeClass}">${u.grade}</span>`:''}
+            ${u.grade?`<span class="grade-pill grade-${u.grade}">${u.grade}</span>`:''}
             ${u.field?`<span class="field-pill">🔖 ${u.field}</span>`:''}
-            <span>${QUARTERS[currentQ]} 空き: ${qSlots}コマ / 授業: ${qBusy}コマ</span>
+            <span>${QUARTERS[currentQ]} 空き:${qSlots}コマ / 授業:${qBusy}コマ</span>
           </div>
         </div>
-        ${!isMe
-          ? `<button class="btn btn-sm btn-danger" onclick="showAdminDeleteModal('${uid}')" title="管理者として削除">🗑</button>`
-          : `<button class="btn btn-sm btn-danger" onclick="showLeaveModal()">退室</button>`}
+        ${!isMe?`<button class="btn btn-sm btn-danger" onclick="showAdminDeleteModal('${uid}')">🗑</button>`:`<button class="btn btn-sm btn-danger" onclick="showLeaveModal()">退室</button>`}
       </div>`;
     });
-    html += '</div>';
+    h+='</div>';
   };
-  grades.forEach(g => renderGroup(g, byGrade[g]));
-  if (noGrade.length) renderGroup('その他', noGrade);
-  container.innerHTML = html || '<div class="empty-state"><div class="icon">🔍</div><p>該当するメンバーがいません</p></div>';
+  grades.forEach(g=>renderGroup(g,byGrade[g]));
+  if (noGrade.length) renderGroup('その他',noGrade);
+  c.innerHTML=h||'<div class="empty-state"><div class="icon">🔍</div><p>該当するメンバーがいません</p></div>';
 }
 
-// ---- 退室 ----
-function showLeaveModal() { document.getElementById('leave-modal').style.display = 'flex'; }
+function showLeaveModal() { document.getElementById('leave-modal').style.display='flex'; }
 async function leaveAccount() {
   closeModal('leave-modal');
   try {
-    const uid = currentUser.uid;
+    const uid=currentUser.uid;
     await rtdb.ref(`users/${uid}`).remove();
     await rtdb.ref(`schedules/${uid}`).remove().catch(()=>{});
     localStorage.removeItem('lab_scheduler_profile');
     toast('退室しました。ご利用ありがとうございました。');
-    setTimeout(() => logout(), 1500);
+    setTimeout(()=>logout(),1500);
   } catch(e) { console.error(e); toast('エラーが発生しました'); }
 }
 
-// ---- 管理者削除 ----
-let adminTargetUid = null;
+let adminTargetUid=null;
 function showAdminDeleteModal(uid) {
-  adminTargetUid = uid;
-  const name = allUsers[uid]?.name || uid;
-  document.getElementById('admin-modal-desc').textContent = `「${name}」のデータをすべて削除します。管理者パスワードを入力してください。`;
-  document.getElementById('admin-pw-input').value = '';
-  document.getElementById('admin-modal').style.display = 'flex';
+  adminTargetUid=uid;
+  document.getElementById('admin-modal-desc').textContent=`「${allUsers[uid]?.name||uid}」のデータをすべて削除します。管理者パスワードを入力してください。`;
+  document.getElementById('admin-pw-input').value='';
+  document.getElementById('admin-modal').style.display='flex';
 }
 async function adminDelete() {
-  const pw = document.getElementById('admin-pw-input').value;
-  if (pw !== ADMIN_PASSWORD) { toast('パスワードが違います'); return; }
+  if (document.getElementById('admin-pw-input').value!==ADMIN_PASSWORD) { toast('パスワードが違います'); return; }
   closeModal('admin-modal');
   try {
     await rtdb.ref(`users/${adminTargetUid}`).remove();
     await rtdb.ref(`schedules/${adminTargetUid}`).remove().catch(()=>{});
-    toast('メンバーを削除しました');
-    adminTargetUid = null;
+    toast('メンバーを削除しました'); adminTargetUid=null;
   } catch(e) { console.error(e); toast('エラーが発生しました'); }
 }
-function closeModal(id) { document.getElementById(id).style.display = 'none'; }
+function closeModal(id) { document.getElementById(id).style.display='none'; }
 
-// ---- Tab switch ----
 function switchTab(name) {
-  activeTab = name;
-  const tabs = ['my','overview','common','members'];
-  document.querySelectorAll('.tab').forEach((t,i) => t.classList.toggle('active', tabs[i]===name));
-  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  activeTab=name;
+  const tabs=['my','overview','common','members'];
+  document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('active',tabs[i]===name));
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
   document.getElementById('panel-'+name).classList.add('active');
   refreshActivePanel();
 }
 
-// ---- Init ----
 updateQInfo();
 tryRestoreSession();
 </script>
